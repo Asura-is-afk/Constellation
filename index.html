@@ -3,44 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Bhumi's Galaxy ✨</title>
+  <title>Bhumi's Solar System 🪐</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { overflow: hidden; background: #030014; font-family: 'Segoe UI', system-ui, sans-serif; user-select: none; }
+    body { overflow: hidden; background: #010206; font-family: 'Segoe UI', system-ui, sans-serif; user-select: none; }
     #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
     
     #ui-overlay {
-      position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+      position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%);
       z-index: 10; text-align: center; color: #fff; pointer-events: none;
-      width: 90%; max-width: 400px;
+      width: 90%; max-width: 500px;
     }
     h1 {
-      font-size: 1.8rem; font-weight: 300; letter-spacing: 2px;
-      background: linear-gradient(90deg, #ff71ce, #01cdfe, #05ffa1);
+      font-size: 2.1rem; font-weight: 300; letter-spacing: 4px;
+      background: linear-gradient(90deg, #38ef7d, #11998e, #00d2ff);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      text-shadow: 0 0 20px rgba(255, 113, 206, 0.5);
+      text-shadow: 0 0 25px rgba(56, 239, 125, 0.4);
     }
-    p { font-size: 0.9rem; color: #a5b4fc; margin-top: 8px; opacity: 0.85; }
+    p { font-size: 0.85rem; color: #a7f3d0; margin-top: 6px; opacity: 0.85; letter-spacing: 1.5px; }
+
+    #controls-hint {
+      position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.6);
+      font-size: 0.8rem; z-index: 10; pointer-events: none;
+      background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px);
+      padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
+<div id="controls-hint">👆 Touch & Drag to Orbit | Pinch to Zoom</div>
 <div id="canvas-container"></div>
 
 <div id="ui-overlay">
-  <h1>✨ Explore Bhumi's Galaxy ✨</h1>
-  <p>Move around to discover the hidden stars</p>
+  <h1>🌌 BHUMI'S SOLAR SYSTEM</h1>
+  <p>Exploring the Universe of Stars & Memories</p>
 </div>
 
 <script>
-  let scene, camera, renderer, particlesMesh;
-  let mouseX = 0, mouseY = 0;
-  let targetX = 0, targetY = 0;
-  const textCards = [];
+  // Core Engine Setup
+  let scene, camera, renderer, solarGroup;
+  let isDragging = false;
+  let previousMousePosition = { x: 0, y: 0 };
+  let targetRotationX = 0.3, targetRotationY = 0;
+  let zoomDistance = 45;
 
-  // Messages to float inside the galaxy
-  const messages = [
+  const planets = [];
+  const messageCards = [];
+
+  const textMessages = [
     "Bhumi is cute 💖",
     "Bhumi is pagal 🤪",
     "Bhumi is bauni 🤏",
@@ -49,148 +61,230 @@
     "Star of the Universe ⭐"
   ];
 
-  // Helper function to turn dynamic text into a 3D Texture
-  function createTextTexture(text) {
+  // Procedural Canvas Texture Generators
+  function createSunTexture() {
     const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 512;
     const ctx = canvas.getContext('2d');
-    canvas.width = 512;
-    canvas.height = 128;
+    const grad = ctx.createRadialGradient(256, 256, 10, 256, 256, 256);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.2, '#ffe600');
+    grad.addColorStop(0.5, '#ff5500');
+    grad.addColorStop(1, '#110022');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 512);
+    return new THREE.CanvasTexture(canvas);
+  }
 
-    // Background card glow
-    ctx.fillStyle = 'rgba(15, 10, 35, 0.75)';
-    ctx.strokeStyle = '#ff71ce';
+  function createPlanetTexture(color1, color2) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256; canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 256, 256);
+    grad.addColorStop(0, color1);
+    grad.addColorStop(1, color2);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 256);
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  function createMessageTexture(text) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = 'rgba(6, 15, 30, 0.85)';
+    ctx.strokeStyle = '#38ef7d';
     ctx.lineWidth = 4;
     
-    // Rounded box outline
     ctx.beginPath();
-    ctx.roundRect(10, 10, 492, 108, 20);
+    ctx.roundRect(10, 10, 492, 108, 24);
     ctx.fill();
     ctx.stroke();
 
-    // Text style
-    ctx.font = 'bold 32px "Segoe UI", sans-serif';
+    ctx.font = 'bold 28px "Segoe UI", sans-serif';
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#01cdfe';
+    ctx.shadowColor = '#38ef7d';
     ctx.shadowBlur = 12;
     ctx.fillText(text, 256, 64);
 
-    const texture = new THREE.CanvasTexture(canvas);
-    return texture;
+    return new THREE.CanvasTexture(canvas);
   }
 
   function init() {
     const container = document.getElementById('canvas-container');
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x030014, 0.02);
+    scene.fog = new THREE.FogExp2(0x010206, 0.008);
 
     camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 28;
+    camera.position.set(0, 15, zoomDistance);
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Create 3D Particle Heart Galaxy
-    const particleCount = 2800;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(particleCount * 3);
-    const colors = new Float32Array(particleCount * 3);
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
 
-    for (let i = 0; i < particleCount; i++) {
-      const t = Math.random() * Math.PI * 2;
-      const u = (Math.random() - 0.5) * 2;
-      
-      // Heart parametric equation
-      let x = 16 * Math.pow(Math.sin(t), 3);
-      let y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
-      let z = u * 8;
+    const sunLight = new THREE.PointLight(0xffffff, 2.0, 300);
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
 
-      // Scale down & introduce turbulence scatter
-      x = (x * 0.65) + (Math.random() - 0.5) * 4;
-      y = (y * 0.65) + (Math.random() - 0.5) * 4;
-      z = z + (Math.random() - 0.5) * 4;
+    solarGroup = new THREE.Group();
+    scene.add(solarGroup);
 
-      positions[i * 3] = x;
-      positions[i * 3 + 1] = y;
-      positions[i * 3 + 2] = z;
-
-      // Cyberpunk Pastel Palette
-      colors[i * 3] = 0.9 + Math.random() * 0.1;       // Red
-      colors[i * 3 + 1] = 0.3 + Math.random() * 0.4;   // Green
-      colors[i * 3 + 2] = 0.8 + Math.random() * 0.2;   // Blue
+    // Deep Space Starfield
+    const starGeo = new THREE.BufferGeometry();
+    const starCoords = [];
+    for (let i = 0; i < 3000; i++) {
+      starCoords.push(
+        (Math.random() - 0.5) * 400,
+        (Math.random() - 0.5) * 400,
+        (Math.random() - 0.5) * 400
+      );
     }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0x88aaff, size: 0.6 });
+    scene.add(new THREE.Points(starGeo, starMat));
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    // 1. Central Glowing Sun
+    const sunMat = new THREE.MeshBasicMaterial({ map: createSunTexture() });
+    const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(4.5, 32, 32), sunMat);
+    solarGroup.add(sunMesh);
 
-    const material = new THREE.PointsMaterial({
-      size: 0.28,
-      vertexColors: true,
+    // Sun Atmosphere Glow
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa00,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.25,
+      side: THREE.BackSide
+    });
+    const glowMesh = new THREE.Mesh(new THREE.SphereGeometry(5.8, 32, 32), glowMat);
+    solarGroup.add(glowMesh);
+
+    // 2. Planet Configuration
+    const planetSpecs = [
+      { name: "Mercury", size: 0.8, dist: 9, speed: 0.03, color1: "#8a8a8a", color2: "#4a4a4a" },
+      { name: "Venus", size: 1.2, dist: 13, speed: 0.02, color1: "#e3bb76", color2: "#a8732a" },
+      { name: "Earth", size: 1.4, dist: 18, speed: 0.015, color1: "#2b82c5", color2: "#1b4d75" },
+      { name: "Mars", size: 1.0, dist: 23, speed: 0.012, color1: "#c1440e", color2: "#702303" },
+      { name: "Jupiter", size: 2.6, dist: 29, speed: 0.008, color1: "#b07f35", color2: "#54370c" },
+      { name: "Saturn", size: 2.0, dist: 36, speed: 0.005, color1: "#e2bf7d", color2: "#8a6d3b", hasRings: true }
+    ];
+
+    planetSpecs.forEach((spec) => {
+      // Orbit Line
+      const orbitGeo = new THREE.BufferGeometry();
+      const points = [];
+      for (let i = 0; i <= 64; i++) {
+        const theta = (i / 64) * Math.PI * 2;
+        points.push(new THREE.Vector3(Math.cos(theta) * spec.dist, 0, Math.sin(theta) * spec.dist));
+      }
+      orbitGeo.setFromPoints(points);
+      const orbitMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1 });
+      solarGroup.add(new THREE.Line(orbitGeo, orbitMat));
+
+      // Planet Mesh
+      const pGeo = new THREE.SphereGeometry(spec.size, 24, 24);
+      const pMat = new THREE.MeshStandardMaterial({ map: createPlanetTexture(spec.color1, spec.color2), roughness: 0.6 });
+      const planet = new THREE.Mesh(pGeo, pMat);
+
+      const angle = Math.random() * Math.PI * 2;
+      planet.userData = { dist: spec.dist, speed: spec.speed, angle: angle };
+      solarGroup.add(planet);
+      planets.push(planet);
+
+      // Saturn Rings
+      if (spec.hasRings) {
+        const ringGeo = new THREE.RingGeometry(spec.size * 1.4, spec.size * 2.3, 32);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xa88e5e, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2.3;
+        planet.add(ring);
+      }
     });
 
-    particlesMesh = new THREE.Points(geometry, material);
-    scene.add(particlesMesh);
-
-    // Create 3D Floating Message Cards
-    messages.forEach((msg, index) => {
-      const texture = createTextTexture(msg);
-      const cardGeo = new THREE.PlaneGeometry(6, 1.5);
-      const cardMat = new THREE.MeshBasicMaterial({
-        map: texture,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.95
-      });
-
+    // 3. Orbiting Message Cards
+    textMessages.forEach((msg, idx) => {
+      const texture = createMessageTexture(msg);
+      const cardGeo = new THREE.PlaneGeometry(7, 1.8);
+      const cardMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
       const card = new THREE.Mesh(cardGeo, cardMat);
-      
-      // Orbit placements around the heart constellation
-      const angle = (index / messages.length) * Math.PI * 2;
-      const radius = 13 + (Math.random() * 3);
-      card.position.set(Math.cos(angle) * radius, Math.sin(angle) * (radius * 0.6), (Math.random() - 0.5) * 10);
-      
-      scene.add(card);
-      textCards.push(card);
+
+      const dist = 14 + (idx * 4);
+      const angle = (idx / textMessages.length) * Math.PI * 2;
+
+      card.userData = { dist, angle, speed: 0.006 - (idx * 0.0005) };
+      solarGroup.add(card);
+      messageCards.push(card);
     });
 
-    // Event Listeners for Touch/Mouse Interaction
-    document.addEventListener('mousemove', onPointerMove);
-    document.addEventListener('touchmove', onPointerMove);
-    window.addEventListener('resize', onWindowResize);
+    // Event Listeners for Rotation & Zoom
+    window.addEventListener('mousedown', (e) => { isDragging = true; previousMousePosition = { x: e.clientX, y: e.clientY }; });
+    window.addEventListener('mouseup', () => isDragging = false);
+    window.addEventListener('mousemove', onPointerMove);
 
+    window.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    });
+    window.addEventListener('touchend', () => isDragging = false);
+    window.addEventListener('touchmove', onPointerMove);
+
+    window.addEventListener('wheel', (e) => {
+      zoomDistance += e.deltaY * 0.05;
+      zoomDistance = Math.max(20, Math.min(90, zoomDistance));
+    });
+
+    window.addEventListener('resize', onWindowResize);
     animate();
   }
 
   function onPointerMove(e) {
+    if (!isDragging) return;
+
     let clientX = e.clientX || (e.touches && e.touches[0].clientX);
     let clientY = e.clientY || (e.touches && e.touches[0].clientY);
 
     if (clientX && clientY) {
-      mouseX = (clientX - window.innerWidth / 2) * 0.0008;
-      mouseY = (clientY - window.innerHeight / 2) * 0.0008;
+      const deltaX = clientX - previousMousePosition.x;
+      const deltaY = clientY - previousMousePosition.y;
+
+      targetRotationY += deltaX * 0.005;
+      targetRotationX += deltaY * 0.005;
+
+      previousMousePosition = { x: clientX, y: clientY };
     }
   }
 
   function animate() {
     requestAnimationFrame(animate);
 
-    targetX += (mouseX - targetX) * 0.05;
-    targetY += (mouseY - targetY) * 0.05;
+    // Smooth Physics Orbiting
+    solarGroup.rotation.y += (targetRotationY - solarGroup.rotation.y) * 0.05;
+    solarGroup.rotation.x += (targetRotationX - solarGroup.rotation.x) * 0.05;
+    camera.position.z += (zoomDistance - camera.position.z) * 0.05;
 
-    // Rotate Galaxy Core
-    particlesMesh.rotation.y += 0.0025;
-    particlesMesh.rotation.x = targetY * 0.6;
-    particlesMesh.rotation.y += targetX * 0.6;
+    // Orbit Planets
+    planets.forEach((p) => {
+      p.userData.angle += p.userData.speed;
+      p.position.x = Math.cos(p.userData.angle) * p.userData.dist;
+      p.position.z = Math.sin(p.userData.angle) * p.userData.dist;
+      p.rotation.y += 0.01;
+    });
 
-    // Gently float and face text cards toward camera
-    textCards.forEach((card, idx) => {
-      card.rotation.y += 0.003;
-      card.position.y += Math.sin(Date.now() * 0.0015 + idx) * 0.008;
+    // Orbit Message Badges
+    messageCards.forEach((c) => {
+      c.userData.angle += c.userData.speed;
+      c.position.x = Math.cos(c.userData.angle) * c.userData.dist;
+      c.position.z = Math.sin(c.userData.angle) * c.userData.dist;
+      c.position.y = Math.sin(Date.now() * 0.0015 + c.userData.dist) * 1.5;
     });
 
     renderer.render(scene, camera);
